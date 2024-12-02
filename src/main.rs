@@ -1,53 +1,59 @@
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, MutexGuard};
 use std::thread::{self, sleep};
 use rand::Rng;
 
 fn main() {
     println!("Start Dining Philosophers Simulations!");
+    // initialize 5 forks
     let forks = Arc::new(vec![
+        Mutex::new(false),
+        Mutex::new(false),
+        Mutex::new(false),
         Mutex::new(false),
         Mutex::new(false),
     ]);
 
-    let forks_2 = Arc::clone(&forks);
+    for i in 0..5 {
+        let forks_clone = Arc::clone(&forks);
+        let left_fork_index: usize = i;
+        let right_fork_index: usize = (i + 1) % 5;
+        let is_left_first = i == 0;
+        thread::spawn(move || {
+            philosopher(i, forks_clone, left_fork_index, right_fork_index, is_left_first);
+        });
+        
+    }
+    // simulation duration
+    sleep(std::time::Duration::from_secs(600));
     
-    thread::spawn(move || {
-        loop {
-            println!("Philosopher 1 is Thinking!");
-            let mut rng = rand::thread_rng();
-            sleep(std::time::Duration::from_secs(rng.gen_range(1..5)));
-            println!("Philosopher 1 is Hungry!");
+}
 
-            // lock does block
-            let left_fork = forks[0].lock().unwrap();
-            sleep(std::time::Duration::from_secs(1));
-            let right_fork = forks[1].lock().unwrap();
-            println!("Philosopher 1 is Eating!");
-            sleep(std::time::Duration::from_secs(rng.gen_range(1..5)));
-            drop(left_fork);
-            drop(right_fork);
+fn philosopher(id: usize, forks: Arc<Vec<Mutex<bool>>>, left_fork: usize, right_fork: usize, is_left_first: bool) {
+    loop {
+        println!("Philosopher {} is Thinking!", id);
+        // think for 5 - 10 seconds before gets hungry
+        let mut rng = rand::thread_rng();
+        sleep(std::time::Duration::from_secs(rng.gen_range(5..10)));
+        println!("Philosopher {} is Hungry!", id);
+
+        let first_fork_lock: MutexGuard<bool>;
+        let second_fork_lock: MutexGuard<bool>;
+        if is_left_first {
+            first_fork_lock = forks[left_fork].lock().unwrap();
+            //wait for 1 second before picking up the other fork to make it easier to deadlock
+            sleep(std::time::Duration::from_secs(1)); 
+            second_fork_lock = forks[right_fork].lock().unwrap();
+        } else {
+            first_fork_lock = forks[right_fork].lock().unwrap();
+            //wait for 1 second before picking up the other fork to make it easier to deadlock
+            sleep(std::time::Duration::from_secs(1)); 
+            second_fork_lock = forks[left_fork].lock().unwrap();
         }
-    });
-    
-    thread::spawn(move || {
-        loop {
-            println!("Philosopher 2 is Thinking!");
-            let mut rng = rand::thread_rng();
-            sleep(std::time::Duration::from_secs(rng.gen_range(1..5)));
-            println!("Philosopher 2 is Hungry!");
-
-            // lock does block
-            let left_fork = forks_2[0].lock().unwrap();
-            sleep(std::time::Duration::from_secs(1));
-            let right_fork = forks_2[1].lock().unwrap();
-            println!("Philosopher 2 is Eating!");
-            sleep(std::time::Duration::from_secs(rng.gen_range(1..5)));
-            drop(left_fork);
-            drop(right_fork);
-        }
-    });
-
-    sleep(std::time::Duration::from_secs(60));
-    
+        println!("Philosopher {} is Eating!", id);
+        sleep(std::time::Duration::from_secs(rng.gen_range(1..3))); //eat for 1-3 seconds
+        drop(first_fork_lock);
+        drop(second_fork_lock);
+        // drop forks and go back to thinking
+    }
 }
 
